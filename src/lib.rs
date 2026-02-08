@@ -580,7 +580,7 @@ impl<T: Asset> AssetAnimator<T> {
 
 #[cfg(test)]
 mod tests {
-    use bevy::ecs::{change_detection::MaybeLocation, component::Tick};
+    use bevy::ecs::{change_detection::MaybeLocation, change_detection::Tick};
 
     use self::tweenable::ComponentTarget;
 

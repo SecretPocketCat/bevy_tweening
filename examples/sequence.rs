@@ -199,7 +199,7 @@ fn update_text(
     mut text_spans: Query<&mut TextSpan, With<ProgressValue>>,
     anim_red: Single<&Animator<Transform>, With<RedSprite>>,
     anim_blue: Single<&Animator<Transform>, With<BlueSprite>>,
-    mut query_event: EventReader<TweenCompleted>,
+    mut query_event: MessageReader<TweenCompleted>,
 ) {
     let progress_red = anim_red.tweenable().progress();
 

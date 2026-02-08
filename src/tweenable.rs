@@ -6,7 +6,7 @@ use std::{
 use bevy::{ecs::system::SystemId, prelude::*};
 
 #[cfg(feature = "bevy_asset")]
-use bevy::asset::{Asset, AssetId};
+use bevy::asset::Asset;
 
 use crate::{EaseMethod, Lens, RepeatCount, RepeatStrategy, TweeningDirection};
 
@@ -38,7 +38,7 @@ use crate::{EaseMethod, Lens, RepeatCount, RepeatStrategy, TweeningDirection};
 /// #     fn total_duration(&self) -> TotalDuration  { unimplemented!() }
 /// #     fn set_elapsed(&mut self, elapsed: Duration)  { unimplemented!() }
 /// #     fn elapsed(&self) -> Duration  { unimplemented!() }
-/// #     fn tick<'a>(&mut self, delta: Duration, target: &'a mut dyn Targetable<Transform>, entity: Entity, events: &mut Mut<Events<TweenCompleted>>, commands: &mut Commands) -> TweenState  { unimplemented!() }
+/// #     fn tick<'a>(&mut self, delta: Duration, target: &'a mut dyn Targetable<Transform>, entity: Entity, events: &mut Mut<Messages<TweenCompleted>>, commands: &mut Commands) -> TweenState  { unimplemented!() }
 /// #     fn rewind(&mut self) { unimplemented!() }
 /// # }
 ///
@@ -88,7 +88,7 @@ pub enum TweenState {
 /// updated anymore, a state which is never reached for looping animation. Here
 /// the [`TweenCompleted`] event instead marks the end of a single loop
 /// iteration.
-#[derive(Copy, Clone, Event)]
+#[derive(Copy, Clone, Message)]
 pub struct TweenCompleted {
     /// The [`Entity`] the tween which completed and its animator are attached
     /// to.
@@ -268,10 +268,8 @@ pub struct AssetTarget<'a, T: Asset> {
 impl<'a, T: Asset> AssetTarget<'a, T> {
     /// Create a new instance from an [`Assets`].
     pub fn new(assets: Mut<'a, Assets<T>>) -> Self {
-        Self {
-            assets,
-            handle: Handle::Weak(AssetId::default()),
-        }
+        let handle: Handle<T> = Handle::Uuid(AssetId::<T>::DEFAULT_UUID, std::marker::PhantomData);
+        Self { assets, handle }
     }
 
     /// Check if the current target is valid given the value of [`handle`].
@@ -357,7 +355,7 @@ pub trait Tweenable<T>: Send + Sync {
         delta: Duration,
         target: &mut dyn Targetable<T>,
         entity: Entity,
-        events: &mut Mut<Events<TweenCompleted>>,
+        events: &mut Mut<Messages<TweenCompleted>>,
         commands: &mut Commands,
     ) -> TweenState;
 
@@ -531,7 +529,7 @@ impl<T> Tween<T> {
     /// )
     /// .with_completed_event(42);
     ///
-    /// fn my_system(mut reader: EventReader<TweenCompleted>) {
+    /// fn my_system(mut reader: MessageReader<TweenCompleted>) {
     ///   for ev in reader.read() {
     ///     assert_eq!(ev.user_data, 42);
     ///     println!("Entity {:?} raised TweenCompleted!", ev.entity);
@@ -763,7 +761,7 @@ impl<T> Tweenable<T> for Tween<T> {
         delta: Duration,
         target: &mut dyn Targetable<T>,
         entity: Entity,
-        events: &mut Mut<Events<TweenCompleted>>,
+        events: &mut Mut<Messages<TweenCompleted>>,
         commands: &mut Commands,
     ) -> TweenState {
         if self.clock.state() == TweenState::Completed {
@@ -813,10 +811,7 @@ impl<T> Tweenable<T> for Tween<T> {
                 };
 
                 // send regular event
-                events.send(event);
-
-                // trigger all entity-scoped observers
-                commands.trigger_targets(event, entity);
+                events.write(event);
             }
             if let Some(cb) = &self.on_completed {
                 cb(entity, self);
@@ -970,7 +965,7 @@ impl<T> Tweenable<T> for Sequence<T> {
         mut delta: Duration,
         target: &mut dyn Targetable<T>,
         entity: Entity,
-        events: &mut Mut<Events<TweenCompleted>>,
+        events: &mut Mut<Messages<TweenCompleted>>,
         commands: &mut Commands,
     ) -> TweenState {
         self.elapsed = self.elapsed.saturating_add(delta).min(self.duration);
@@ -1054,7 +1049,7 @@ impl<T> Tweenable<T> for Tracks<T> {
         delta: Duration,
         target: &mut dyn Targetable<T>,
         entity: Entity,
-        events: &mut Mut<Events<TweenCompleted>>,
+        events: &mut Mut<Messages<TweenCompleted>>,
         commands: &mut Commands,
     ) -> TweenState {
         self.elapsed = self.elapsed.saturating_add(delta).min(self.duration);
@@ -1132,7 +1127,7 @@ impl<T> Delay<T> {
     /// let delay: Delay<Transform> = Delay::new(Duration::from_secs(5))
     ///   .with_completed_event(42);
     ///
-    /// fn my_system(mut reader: EventReader<TweenCompleted>) {
+    /// fn my_system(mut reader: MessageReader<TweenCompleted>) {
     ///   for ev in reader.read() {
     ///     assert_eq!(ev.user_data, 42);
     ///     println!("Entity {:?} raised TweenCompleted!", ev.entity);
@@ -1229,7 +1224,7 @@ impl<T> Delay<T> {
 
     /// Check if the delay completed.
     pub fn is_completed(&self) -> bool {
-        self.timer.finished()
+        self.timer.is_finished()
     }
 
     /// Get the current tweenable state.
@@ -1339,7 +1334,7 @@ impl<T> Tweenable<T> for Delay<T> {
         delta: Duration,
         _target: &mut dyn Targetable<T>,
         entity: Entity,
-        events: &mut Mut<Events<TweenCompleted>>,
+        events: &mut Mut<Messages<TweenCompleted>>,
         commands: &mut Commands,
     ) -> TweenState {
         let was_completed = self.is_completed();
@@ -1357,10 +1352,7 @@ impl<T> Tweenable<T> for Delay<T> {
                 };
 
                 // send regular event
-                events.send(event);
-
-                // trigger all entity-scoped observers
-                commands.trigger_targets(event, entity);
+                events.write(event);
             }
             if let Some(cb) = &self.on_completed {
                 cb(entity, self);
@@ -1383,9 +1375,9 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use bevy::ecs::{
-        change_detection::MaybeLocation,
-        component::{Mutable, Tick},
-        event::Events,
+        change_detection::{MaybeLocation, Tick},
+        component::Mutable,
+        message::Messages,
         system::SystemState,
         world::CommandQueue,
     };
@@ -1414,7 +1406,7 @@ mod tests {
     /// Utility to create a test environment to tick a tween.
     fn make_test_env() -> (World, Entity, SystemId) {
         let mut world = World::new();
-        world.init_resource::<Events<TweenCompleted>>();
+        world.init_resource::<Messages<TweenCompleted>>();
         let entity = world.spawn(Transform::default()).id();
         let system_id = world.register_system(oneshot_test);
         (world, entity, system_id)
@@ -1431,7 +1423,7 @@ mod tests {
         entity: Entity,
     ) -> TweenState {
         world.resource_scope(
-            |world: &mut World, mut events: Mut<Events<TweenCompleted>>| {
+            |world: &mut World, mut events: Mut<Messages<TweenCompleted>>| {
                 let transform = world.get_mut::<T>(entity).unwrap();
                 let mut target = ComponentTarget::new(transform);
                 tween.tick(
@@ -1569,7 +1561,7 @@ mod tests {
                 assert!(tween.event_data.is_none());
 
                 let (mut world, entity, system_id) = make_test_env();
-                let mut event_reader_system_state: SystemState<EventReader<TweenCompleted>> =
+                let mut event_reader_system_state: SystemState<MessageReader<TweenCompleted>> =
                     SystemState::new(&mut world);
 
                 // Register callbacks to count started/ended events
@@ -1719,7 +1711,7 @@ mod tests {
 
                     // Propagate events
                     {
-                        let mut events = world.resource_mut::<Events<TweenCompleted>>();
+                        let mut events = world.resource_mut::<Messages<TweenCompleted>>();
                         events.update();
                     }
 
@@ -2128,7 +2120,7 @@ mod tests {
         }
 
         // Dummy event writer
-        let mut event_reader_system_state: SystemState<EventReader<TweenCompleted>> =
+        let mut event_reader_system_state: SystemState<MessageReader<TweenCompleted>> =
             SystemState::new(&mut world);
 
         // Register callbacks to count completed events
@@ -2155,7 +2147,7 @@ mod tests {
 
             // Propagate events
             {
-                let mut events = world.resource_mut::<Events<TweenCompleted>>();
+                let mut events = world.resource_mut::<Messages<TweenCompleted>>();
                 events.update();
             }
 

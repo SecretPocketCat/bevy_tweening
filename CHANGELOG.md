@@ -103,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Delay::new()` now panics if the `duration` is zero. This prevents creating no-op `Delay` objects, and avoids an internal edge case producing wrong results.
 - Tweens moving to `TweenState::Completed` are now guaranteed to freeze their state. In particular, this means that their direction will not flip at the end of the last loop if their repeat strategy is `RepeatStrategy::MirroredRepeat`.
 - Moved the `TextColorLens` lens from the `bevy_ui` feature to the new `bevy_text` one, to allow using it without the Bevy UI crate.
-- Changed the signature of the `component_animator_system()` and `asset_animator_system()` public functions to directly consume a `ResMut<Events<TweenCompleted>>` instead of an `EventWriter<TweenCompleted>`, to work around some internal limitations.
+- Changed the signature of the `component_animator_system()` and `asset_animator_system()` public functions to directly consume a `ResMut<Messages<TweenCompleted>>` instead of an `EventWriter<TweenCompleted>`, to work around some internal limitations.
 - Changed `Delay` into `Delay<T>`, taking the animation target type like other tweenables, to be able to emit events and raise callbacks.
 - Changed `CompletedCallback<T>` to take the tweenable type itself, instead of the target type. Users upgrading should replace `CompletedCallback<T>` with `CompletedCallback<Tween<T>>`.
 - The `set_progress()`, `progress()`, and `times_completed()` method of `Tweenable<T>` now have a default implementation, and all built-in tweenables use that implementation.

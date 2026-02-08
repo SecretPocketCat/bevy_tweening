@@ -389,7 +389,7 @@ impl Lens<Sprite> for SpriteColorLens {
 
 #[cfg(test)]
 mod tests {
-    use bevy::ecs::{change_detection::MaybeLocation, component::Tick};
+    use bevy::ecs::{change_detection::MaybeLocation, change_detection::Tick};
     use std::f32::consts::TAU;
 
     #[cfg(any(feature = "bevy_sprite", feature = "bevy_text"))]
